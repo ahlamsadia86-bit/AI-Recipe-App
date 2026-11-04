@@ -1,26 +1,27 @@
 import React from "react";
 import IngredientsList from "./components/IngredientsList";
-import ClaudeRecipe from "./components/ClaudeRecipe";
-import { getRecipeFromChefClaude } from "./ai";
+import GeminiRecipe from "./components/GeminiRecipe";
+import { getRecipeFromChefGemini } from "./ai";
 
 export default function Main() {
-  const [ingredients, setIngredients] = React.useState([
-    "chicken",
-    "all the main spices",
-    "corn",
-    "heavy cream",
-    "pasta",
-  ]);
+  const [ingredients, setIngredients] = React.useState([]);
   const [recipe, setRecipe] = React.useState("");
 
   async function getRecipe() {
-    const recipeMarkdown = await getRecipeFromChefClaude(ingredients);
+    const recipeMarkdown = await getRecipeFromChefGemini(ingredients);
     setRecipe(recipeMarkdown);
   }
 
   function addIngredient(formData) {
-    const newIngredient = formData.get("ingredient");
+    const newIngredient = formData.get("ingredient").trim();
+
+    // Don't add empty ingredients
+    if (!newIngredient) return;
+
     setIngredients((prevIngredients) => [...prevIngredients, newIngredient]);
+
+    // Clear previous recipe when ingredients change
+    setRecipe("");
   }
 
   return (
@@ -39,7 +40,7 @@ export default function Main() {
         <IngredientsList ingredients={ingredients} getRecipe={getRecipe} />
       )}
 
-      {recipe && <ClaudeRecipe recipe={recipe} />}
+      {recipe && <GeminiRecipe recipe={recipe} />}
     </main>
   );
 }

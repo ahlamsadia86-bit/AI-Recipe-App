@@ -1,4 +1,4 @@
-export async function getRecipeFromChefClaude(ingredientsArr) {
+export async function getRecipeFromChefGemini(ingredientsArr) {
   const ingredientsString = ingredientsArr.join(", ");
 
   try {

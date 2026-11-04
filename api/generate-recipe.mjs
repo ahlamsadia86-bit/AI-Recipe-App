@@ -14,61 +14,91 @@ export default async function handler(req, res) {
       });
     }
 
-    const token = process.env.HF_ACCESS_TOKEN;
-    const model = process.env.HF_MODEL;
+    const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!token || !model) {
+    if (!apiKey) {
       return res.status(500).json({
-        error: "Hugging Face configuration is missing.",
+        error: "Gemini API key is missing.",
       });
     }
 
-    const response = await fetch(
-      "https://router.huggingface.co/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [
+                {
+                  text: "You are Chef Gemini, a helpful recipe assistant. Suggest one delicious recipe using the ingredients provided. Format your response in Markdown. Include a recipe title, description, ingredients with quantities, and step-by-step cooking instructions.",
+                },
+              ],
+            },
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: `I have these ingredients: ${ingredients}. Please recommend a recipe I can make.`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1500,
+            },
+          }),
         },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are Chef Claude, a helpful recipe assistant. Suggest a recipe using the ingredients provided. Format your response in Markdown.",
-            },
-            {
-              role: "user",
-              content: `I have ${ingredients}. Please recommend a recipe I can make.`,
-            },
-          ],
-          max_tokens: 1024,
-        }),
-      },
-    );
+      );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      console.error("Hugging Face error:", data);
+      if (response.ok) {
+        const recipe = data.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text || "")
+          .join("")
+          .trim();
+
+        if (!recipe) {
+          return res.status(502).json({
+            error: "Gemini did not return a recipe.",
+          });
+        }
+
+        return res.status(200).json({ recipe });
+      }
+
+      // Retry only temporary server errors
+      if (
+        (response.status === 503 ||
+          response.status === 500 ||
+          response.status === 502 ||
+          response.status === 504) &&
+        attempt < maxAttempts
+      ) {
+        console.log(
+          `Gemini temporarily unavailable. Retry ${attempt} of ${maxAttempts - 1}.`,
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+
+        continue;
+      }
+
+      console.error("Gemini API error:", data);
 
       return res.status(response.status).json({
-        error:
-          data.error?.message || data.error || "Hugging Face request failed.",
+        error: data.error?.message || "Gemini recipe generation failed.",
       });
     }
-
-    const recipe = data.choices?.[0]?.message?.content;
-
-    if (!recipe) {
-      return res.status(502).json({
-        error: "The AI did not return a recipe.",
-      });
-    }
-
-    return res.status(200).json({ recipe });
   } catch (error) {
     console.error("Recipe function error:", error);
 
